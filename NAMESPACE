@@ -1,0 +1,21 @@
+export(
+  STRINGdb,
+  coeffOfvar, 
+  delColDf,
+  downloadAbsentFile,
+  downloadAbsentFileSTRING,
+  get_STRING_species,
+  multi_map_df,
+  plot_ppi_enrichment_graph,
+  ppi_enrichment,
+  ppi_enrichment_full,
+  ppie.compLambda,
+  ppie.compLambdaL1L2,
+  ppie.compPij,
+  ppie.getNumEdgesBetween,
+  renameColDf
+)
+
+exportClasses(
+    STRINGdb
+)

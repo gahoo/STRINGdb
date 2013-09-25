@@ -1,0 +1,384 @@
+%\VignetteIndexEntry{STRINGdb Vignette}
+%\VignetteDepends{}
+%\VignetteKeywords{STRINGdb}
+%\VignettePackage{STRINGdb}
+\documentclass[10pt]{article}
+\textwidth=6.2in
+\textheight=8.5in
+\oddsidemargin=0.2in
+\evensidemargin=0.2in
+\headheight=0in
+\headsep=0in
+
+\begin{document}
+\SweaveOpts{concordance=TRUE, strip.white=false}
+\title{STRINGdb Package Vignette}
+\author{Andrea Franceschini}
+\date{15 July 2013}
+\maketitle
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+\section{INTRODUCTION}
+
+
+STRING (http://www.string-db.org) is a database of known and predicted protein-protein interactions. 
+The interactions include direct (physical) and indirect (functional) associations. 
+The database contains information from numerous sources, including experimental repositories, computational prediction methods and public text collections. Each interaction is associated with a combined confidence score that integrates the various evidences.  We currently cover 5'214'234 proteins from 1133 organisms.
+
+As you will learn in this guide, the STRING database can be usefull to add meaning to list of genes (e.g. the best hits coming out from a screen or the most differentially expressed genes coming out from a Microarray/RNAseq experiment.)
+
+We provide the STRINGdb R package in order to facilitate our users in accessing the STRING database from R.
+In this guide we explain, with examples, most of the package's features and functionalities.\\
+
+In the STRINGdb R package we use the new ReferenceClasses of R (search for "ReferenceClasses" in the R documentation.).  Besides we make use of the iGraph package (http://igraph.sourceforge.net) as a data structure to represent our protein-protein interaction network. \\
+
+To begin, you should first know the NCBI taxonomy identifiers of the organism on which you have performed the experiment (e.g. 9606 for Human, 10090 for mouse). 
+If you don't know that, you can search the NCBI Taxonomy (http://www.ncbi.nlm.nih.gov/taxonomy)  or start looking at our species table (that you can also use to verify that your organism is represented in the STRING database). \\
+Hence, if your species is not Human (i.e. our default species), you can use this function to retrieve/search our species table:
+
+<<species, eval=FALSE>>=
+get_STRING_species(version="9_05", species_name=NULL)
+@ 
+
+
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+<<initialization>>=
+library(STRINGdb)
+string_db <- STRINGdb$new( version="9_05", species=9606, 
+                           score_threshold=0, input_directory="" )
+@
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+As it has been shown in the above commands, you start instantiating the STRINGdb reference class.
+In the constructor of the class you can also define the STRING version to be used and a threshold for the combined scores of the interactions, such that any interaction below that threshold is not loaded in the object (by default the score threshold is set to 400 ! ).\\
+Besides, if you specify a local directory to the parameter input-directory, all the database files will be downloaded into this directory and the package can then be used off-line. Otherwise, the database files will be saved and cached in a temporary directory that will be cleaned automatically when the R session is closed.\\\\
+
+For a better understanding of the package two other commands can be useful:
+
+<<help>>=
+STRINGdb$methods()              # To list all the methods available.
+STRINGdb$help("get_graph")      # To visualize their documentation.
+@
+
+For all the methods that we are going to explain below, you can always use the help function in order to get additional information/parameters with respect to those explained in this guide.\\\\
+
+
+As an example, we use the analyzed data of a microarray study taken from GEO (Gene Expression Omnibus, GSE9008).
+This study investigates the activity of Resveratrol, a natural phytoestrogen found in red wine and a variety of plants, in A549 lung cancer cells. 
+Microarray gene expression profiling after 48 hours exposure to Revestarol has been performed and compared to a control composed by A549 lung cancer cells threated only with ethanol.
+This data is already analyzed for differential expression using the limma package: the genes are sorted by fdr corrected pvalues and the log fold change of the differential expression is also reported in the table.
+
+<<load_data>>=
+data(diff_exp_example1)
+head(diff_exp_example1)
+@
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+As a first step, we map the gene names to the STRING database identifiers using the "map" method.
+In this particular example, we map from gene HUGO names, but our mapping function supports several other common identifiers (e.g. Entrez GeneID, ENSEMBL proteins, RefSeq transcripts ... etc.).\\\\
+The map function adds an additional column with STRING identifiers to the dataframe that is passed as first parameter.
+
+<<map>>=
+example1_mapped <- string_db$map( diff_exp_example1, "gene", removeUnmappedRows = TRUE )
+@
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+As you may have noticed, the previous command prints a warning showing the number of genes that we failed to map. In this particular example, we cannot map all the probes of the microarray that refer to position of the chromosome that are not assigned to a real gene (i.e. all the LOC genes). If we remove all these LOC genes before the mapping we obtain a much lower percentage of unmapped genes (i.e. < 6 \%). \\
+If you set to FALSE the "removeUnmappedRows" parameter, than the rows which corresponds to unmapped genes are left and you can manually inspect them.\\
+Finally, we extract the best 200 genes and we produce an image of the STRING network for those.
+The image shows clearly the genes and how they are possibly functionally related.
+On the top of the plot, we insert a pvalue that represents the probability that you can expect such an equal or greater number of interactions by chance.
+Besides, on the bottom, there is a short-url that points to the relative page on our web-interface. You can copy and paste that url on your favorite browser and/or send it via e-mail to your colleagues or insert it in publications.
+
+<<echo=false>>=
+options(SweaveHooks=list(fig=function()
+par(mar=c(2.1, 0.1, 4.1, 2.1))))
+#par(mar=c(1.1, 0.1, 4.1, 2.1))))
+@
+\setkeys{Gin}{width=1.2\linewidth}
+
+<<get_hits>>=
+hits <- example1_mapped$STRING_id[1:200]  
+@
+
+
+<<plot_network, fig=TRUE>>=
+string_db$plot_network( hits )
+@
+
+
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+\section{PAYLOAD MECHANISM}
+
+This R library provides the ability to interact with the STRING payload mechanism. The payload appears as an additional colored "halo" that starts from the boder of the bubbles.
+
+For example, this allows to color in green the genes that are down-regulated and in red the genes that are up-regulated.
+For this mechanism to work, we provide a function that posts the information on our web server.
+
+<<add_diff_exp_color>>=
+# filter by p-value and add a color column 
+# (i.e. green down-regulated gened and red for up-regulated genes)
+example1_mapped_pval05 <- string_db$add_diff_exp_color( subset(example1_mapped, pvalue<0.05), 
+                                                            logFcColStr="logFC" )    
+@
+
+<<post_payload>>=
+# post payload information to the STRING server
+payload_id <- string_db$post_payload( example1_mapped_pval05$STRING_id, 
+                                        colors=example1_mapped_pval05$color )
+@
+
+<<plot_halo_network, fig=TRUE>>=
+# display a STRING network png with the "halo"
+string_db$plot_network( hits, payload_id=payload_id )
+@
+
+
+
+\begin{Schunk}
+\begin{Sinput}
+
+
+\end{Sinput}
+\end{Schunk}
+
+\section{ENRICHMENT}
+
+
+We provide a method to compute (and visualize) the enrichment in protein-protein interactions along a sorted list of proteins.
+In the context of genome-wide screens (e.g. RNAi or proteomics), it can be useful to visualize the distribution of the enrichment in the resulting sorted list of genes. If the experiment was successful, and the top hits have protein-protein interactions, you should see more enrichment at the beginning of the list than at the end. 
+Besides, you can also use the enrichment graph to help you to define a threshold on the number of proteins to consider (for example, if you see a strong enrichment up to position 600 on your list, this means that the signal is probably sparsed to cover the best 600 genes).
+
+<<echo=false>>=
+options(SweaveHooks=list(fig=function()
+par(mar=c(2.1, 2.1, 4.1, 2.1))))
+@
+\setkeys{Gin}{width=0.8\linewidth}
+<<plot_ppi_enrichment, fig=TRUE>>=
+# plot the enrichment for the best 1000 genes
+string_db$plot_ppi_enrichment( example1_mapped$STRING_id[1:1000], quiet=TRUE ) 
+@
+
+
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+\pagebreak
+
+We also provide a method to compute the enrichment in Gene Ontology, KEGG pathway and Interpro domains, similar to the "enrichment" widget in our web-interface.
+The enrichment is computed using an hypergeometric test. The multiple testing correction method can be changed (setting the methodMT parameter) and it is also possible to specify whether to use the "Inferred from Elettronic Annotations" or only the manually curated annotations.
+
+<<enrichment>>=
+enrichmentGO <- string_db$get_enrichment( hits, category = "Process", methodMT = "fdr", iea = TRUE )
+enrichmentKEGG <- string_db$get_enrichment( hits, category = "KEGG", methodMT = "fdr", iea = TRUE )
+head(enrichmentGO, n=7)
+head(enrichmentKEGG, n=7)
+@
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+
+If you have performed your experiment on a pre-defined set of proteins, it is important to run the enrichment statistics using that set as a background (otherwise you would get a wrong p-value !). Hence, before to launch the methods explained above, you should set the background:
+
+<<background, eval=FALSE>>=
+backgroundV <- example1_mapped$STRING_id[1:2000]   # as an example, we use the first 2000 genes                                                    
+string_db$set_background(backgroundV)
+@
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+You can also set the background when you instantiate the STRINGdb object:
+
+<<new_background_inst, eval=FALSE>>=
+string_db <- STRINGdb$new( score_threshold=0, backgroundV = backgroundV )
+@
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+
+
+\section{CLUSTERING}
+
+The iGraph package provides several clustering/community algorithms: "fastgreedy", "walktrap", "spinglass", "edge.betweenness".
+We encapsulate this in an easy-to-use function that returns the clusters in a list.
+
+<<clustering1>>=
+# get clusters
+clustersList <- string_db$get_clusters(example1_mapped$STRING_id[1:600])
+@
+
+<<echo=false>>=
+options(SweaveHooks=list(fig=function()
+par(mar=c(2.1, 0.1, 4.1, 2.1))))
+@
+\setkeys{Gin}{width=1.2\linewidth}
+<<clustering2, fig=TRUE>>=
+# plot first 4 clusters
+par(mfrow=c(2,2))
+for(i in seq(1:4)){
+ string_db$plot_network(clustersList[[i]])
+}
+@
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+
+
+\section{ADDITIONAL PROTEIN INFORMATION}
+
+You can get a table that contains all the proteins that are present in our database.
+The protein table also include the name, the size and a short description of the proteins.
+
+<<proteins>>=
+string_proteins <- string_db$get_proteins()
+@
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+In the following section we will show how to query STRING with R on some specific proteins.
+In the examples, we will use the famous tumor proteins TP53 and ATM .\\\\
+
+
+First we need to get the STRING identifier of those proteins, using our mp method:
+<<atmtp>>=
+tp53 = string_db$mp( "tp53" )
+atm = string_db$mp( "atm" )
+@
+
+The mp method (i.e. map proteins) is an alternative to our map method, to be used when you need to map only one or few proteins.\\
+It takes in input a vector of protein aliases and returns a vector with the STRING identifiers of those proteins.
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+
+
+Using the following method, you can see the proteins that interact with one or more of your proteins:
+<<neighbors, eval=FALSE>>=
+string_db$get_neighbors( c(tp53, atm) )
+@
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+It is also possible to retrieve the interactions that connect certain input proteins between each other.\\
+Using the "get-interactions" method we can clearly see that TP53 and ATM interact with each other with a good evidence/score.
+
+<<interactions>>=
+string_db$get_interactions( c(tp53, atm) )
+@
+
+Using the get-pubmed-interactions method we can retrieve the pubmed identifiers of the articles that contain the name of both the proteins (if any). Such articles could support to the interaction.
+
+<<pubmedInteractions, eval=FALSE>>=
+string_db$get_pubmed_interaction( tp53, atm )
+@
+
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+
+STRING also provides a way to get homologous proteins: in our database we store an ALL-AGAINST-ALL blast alignment of all our 5 million proteins.
+The method "get-homologs-besthits" can be used to get the best hits of your proteins in all the >1000 STRING species (with the "symbets" parameter you can limit the search to the reciprocal-best-hits.  This increase the confidence to get orthologs and not paralogous proteins)
+
+<<homologs, eval=FALSE>>=
+# get the reciprocal best hits of the following protein in all the STRING species
+string_db$get_homologs_besthits(tp53, symbets = TRUE)
+@
+\begin{Schunk}
+\begin{Sinput}
+
+\end{Sinput}
+\end{Schunk}
+
+In addition, you can get all the homologous in a given species (i.e. all the blast hits): 
+
+<<homologs2, eval=FALSE>>=
+# get the homologs of the following two proteins in the mouse (i.e. species_id=10090)
+string_db$get_homologs(c(tp53, atm), target_species_id=10090, bitscore_threshold=60 )
+@
+
+\begin{Schunk}
+\begin{Sinput}
+
+
+\end{Sinput}
+\end{Schunk}
+
+
+
+\section{CITATION}
+
+Please cite:\\\\
+
+Franceschini, A et al. (2013). STRING v9.1: protein-protein interaction networks, with increased coverage and integration. In:'Nucleic Acids Res. 2013 Jan;41(Database issue):D808-15. doi: 10.1093/nar/gks1094. Epub 2012 Nov 29
+
+
+
+
+
+
+
+
+\end{document}

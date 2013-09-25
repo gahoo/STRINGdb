@@ -1,0 +1,13 @@
+Package: STRINGdb
+Type: Package
+Title: STRINGdb (Search Tool for the Retrieval of Interacting proteins database)
+Version: 0.99.101
+Date: 2013-09-17
+Author: Andrea Franceschini <andrea.franceschini@isb-sib.ch>
+Maintainer: Andrea Franceschini <andrea.franceschini@isb-sib.ch>, Alexander Roth <alexander.roth@gmail.com>, Christian Von
+              Mering <mering@imls.uzh.ch>, Michael Kuhn <michael.kuhn@biotec.tu-dresden.de>, Lars J Jensen
+              <lars.juhl.jensen@gmail.com>
+Description: The STRINGdb package provides a user-friendly interface to the STRING protein-protein interactions database ( http://www.string-db.org ).
+License: GPL-2
+Depends: R (>= 2.14.0), png, sqldf, plyr, igraph, RCurl, plotrix, methods
+Suggests: RUnit, BiocGenerics
