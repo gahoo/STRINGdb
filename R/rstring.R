@@ -134,7 +134,7 @@ Author(s):
         
         if(nrow(annotations)==0){
           temp = downloadAbsentFile(paste("http://string.uzh.ch/permanent/string/", version, "/enrichment_annotations/annotations/annotations_", species, ".tsv.gz", sep=""), oD=input_directory)
-          ann = read.table(temp, sep="\t")
+          ann = read.table(temp, sep="\t", stringsAsFactors=FALSE, quote="", fill=TRUE, header=FALSE)
           ann = renameColDf(ann, "V1", "STRING_id")
           ann = renameColDf(ann, "V2", "term_id")
           ann = renameColDf(ann, "V3", "category")
@@ -247,9 +247,9 @@ Author(s):
         ann = subset(ann, category==temp_category)
         if(!is.null(backgroundV)) ann = subset(ann, STRING_id %in% backgroundV )
         if(!iea) ann = subset(ann, type != "IEA")
-        dfcount = sqldf('select term_id, count(STRING_id) as proteins from ann group by term_id;')
+        dfcount = suppressWarnings(sqldf('select term_id, count(STRING_id) as proteins from ann group by term_id', stringsAsFactors=FALSE))
         annHits = subset(ann, STRING_id %in% string_ids)
-        dfcountHits = sqldf('select term_id, count(STRING_id) as hits from annHits group by term_id;')
+        dfcountHits = suppressWarnings(sqldf('select term_id, count(STRING_id) as hits from annHits group by term_id', stringsAsFactors=FALSE))
         dfcountMerged = merge(dfcount, dfcountHits, by.x="term_id", by.y="term_id", all.x=TRUE)
         dfcountMerged2 = data.frame(dfcountMerged, n = length(unique(ann$STRING_id)) - dfcountMerged$proteins, k = length(unique(annHits$STRING_id)))
         dfcountMerged3 = data.frame(dfcountMerged2, pvalue= phyper(dfcountMerged2$hits-1, dfcountMerged2$proteins, dfcountMerged2$n, dfcountMerged2$k, FALSE))
@@ -318,7 +318,7 @@ Author(s):
         }
         params = list(target_species_id=target_species_id, identifiers=identifiers)
         if(!is.null(bitscore_threshold)) params["bitscore_threshold"] = bitscore_threshold
-        tempDfv=postForm(urlStr, .params=params)
+        tempDfv=postFormSmart(urlStr, .params=params)
         hhits <- read.table(text=tempDfv, sep = "\t", header=TRUE, stringsAsFactors=FALSE, fill = TRUE)
         return(hhits)
       },
@@ -353,7 +353,7 @@ Author(s):
         params = list(identifiers=identifiers, symbets=symbets)
         if(!is.null(bitscore_threshold)) params["bitscore_threshold"] = bitscore_threshold
         if(!is.null(target_species_id)) params["target_species_id"] = target_species_id
-        tempDfv=postForm(urlStr, .params=params)
+        tempDfv=postFormSmart(urlStr, .params=params)
         best_hits <- read.table(text=tempDfv, sep = "\t", header=TRUE, stringsAsFactors=FALSE, fill = TRUE)
         best_hits = subset(best_hits, select=c("STRING_id", "species_id", 
                                                "best_hit_STRING_id","best_hit_bitscore", "best_hit_normscore", "best_hit_alignment_length", "nr_high_scoring_hits"))
@@ -406,7 +406,7 @@ Author(s):
         for(id in string_ids ){   identifiers = paste(identifiers, id, "%0D", sep="")}
         params=list(required_score=required_score, limit=0, network_flavor=network_flavor, identifiers=identifiers)
         if(!is.null(payload_id)) params["internal_payload_id"] = payload_id
-        tempDfv=postForm(urlStr, .params=params)
+        tempDfv=postFormSmart(urlStr, .params=params)
         df=read.table(text=tempDfv, stringsAsFactors=FALSE, fill = TRUE)
         return(df$V1)
 
@@ -471,7 +471,7 @@ Author(s):
         for(id in string_ids ){ identifiers = paste(identifiers, id, "%0D", sep="")}
         params = list(output="image", required_score=required_score, limit=0, network_flavor=network_flavor, identifiers=identifiers)
         if(!is.null(payload_id)) params["internal_payload_id"]= payload_id
-        img <- readPNG(postForm(  urlStr, .params=params) )
+        img <- readPNG(postFormSmart(  urlStr, .params=params) )
         if(!is.null(file))  writePNG(img,  file)
         
         return(img)
@@ -588,7 +588,7 @@ Author(s):
         identifiers=""
         for(id in string_ids ){identifiers = paste(identifiers, id, "%0D", sep="")}
         params = list(limit=1000000, identifiers=identifiers, output="tsv", request="abstracts")
-        tempDfv=postForm(urlStr, .params=params)
+        tempDfv=postFormSmart(urlStr, .params=params)
         pubmedIdsDf <- read.table(text=tempDfv, sep = "\t", header=TRUE, stringsAsFactors=FALSE, fill = TRUE)
         return(pubmedIdsDf$abstractId)
       },
@@ -856,7 +856,7 @@ Author(s):
         if(!is.null(iframe_urls)) postFormParams = c(postFormParams, iframe_urls=paste(iframe_urls, collapse=" "))
         if(!is.null(logo_imgF)) postFormParams = c(postFormParams, logo_img=fileUpload(logo_imgF))
         if(!is.null(legend_imgF)) postFormParams = c(postFormParams, legend_img=fileUpload(legend_imgF))
-        postRs = postForm(paste("http://string-db.org/version_", version, "/newstring_cgi/webservices/post_payload.pl", sep=""),  .params = postFormParams)
+        postRs = postFormSmart(paste("http://string-db.org/version_", version, "/newstring_cgi/webservices/post_payload.pl", sep=""),  .params = postFormParams)
         return(postRs)
       },
       
