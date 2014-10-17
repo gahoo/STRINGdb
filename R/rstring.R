@@ -7,6 +7,7 @@ STRINGdb <- setRefClass("STRINGdb",
       graph="igraph",
       proteins="data.frame",
       aliases_tf="data.frame",
+      aliases_type="character",
       #speciesList="data.frame",
       species="numeric",
       version="character",    
@@ -67,8 +68,8 @@ Author(s):
           species <<- 9606                        
         }
         if(length(version)==0) {
-          cat("WARNING: You didn't specify a version of the STRING database to use. Hence we will use STRING 9_05.\n")
-          version <<- "9_05"                        
+          cat("WARNING: You didn't specify a version of the STRING database to use. Hence we will use STRING 9_1.\n")
+          version <<- "9_1"                        
           current_version = as.character(read.table(url("http://string.uzh.ch/permanent/string/current_version"))$V1)
           if(current_version != version) cat("WARNING: A new version of the STRING R plugin has been released: we suggest you to install the latest version from Bioconductor.\n")
         }else{
@@ -81,6 +82,7 @@ Author(s):
         }
         if(input_directory=="" || is.null(input_directory) || length(input_directory)==0) input_directory<<-tempdir()
         if(input_directory=="" || is.null(input_directory) || length(score_threshold)==0 || score_threshold<1) score_threshold <<- 1
+        aliases_type <<- "take_first"
       },
                           
       
@@ -101,12 +103,13 @@ Author(s):
         x2 = get_annotations_desc()  
         x3 = get_proteins()
         #x4 = get_species()
-        get_aliases() 
+        get_aliases(takeFirst=FALSE)
+        get_aliases(takeFirst=TRUE)
         load()
       },
       
       
-      get_aliases = function(){
+      get_aliases = function(takeFirst=TRUE){
 '
 Description:
   Loads and returns STRING alias table. 
@@ -114,11 +117,38 @@ Description:
 Author(s):
    Andrea Franceschini
 '        
-        temp = downloadAbsentFileSTRING(paste("http://string.uzh.ch/permanent/string/", version, "/protein_aliases/", species, "__protein_aliases.tsv.gz", sep=""), oD=input_directory)
-        downloadAbsentFileSTRING(paste("http://string.uzh.ch/permanent/string/", version, "/protein_aliases/", species, "__protein_aliases_tf.tsv.gz", sep=""), oD=input_directory)
+        if(takeFirst &  aliases_type == "take_first" & nrow(aliases_tf)>0) return(aliases_tf)
+        if(!takeFirst &  aliases_type == "all" & nrow(aliases_tf)>0) return(aliases_tf)
+
+        if(!takeFirst){ 
+          temp = downloadAbsentFileSTRING(paste("http://string.uzh.ch/permanent/string/", version, "/protein_aliases/", species, "__protein_aliases.tsv.gz", sep=""), oD=input_directory)
+          aliases_type <<- "all"
+        }else{
+          temp = downloadAbsentFileSTRING(paste("http://string.uzh.ch/permanent/string/", version, "/protein_aliases/", species, "__protein_aliases_tf.tsv.gz", sep=""), oD=input_directory)
+          aliases_type <<- "take_first"
+        }
+        
+        if(takeFirst &  aliases_type == "take_first" & nrow(aliases_tf)>0) return(aliases_tf)
+        if(!takeFirst &  aliases_type == "all" & nrow(aliases_tf)>0) return(aliases_tf)
+        
+        if(!takeFirst){ 
+          temp = downloadAbsentFileSTRING(paste("http://string.uzh.ch/permanent/string/", version, "/protein_aliases/", species, "__protein_aliases.tsv.gz", sep=""), oD=input_directory)
+          aliases_type <<- "all"
+        }else{
+          temp = downloadAbsentFileSTRING(paste("http://string.uzh.ch/permanent/string/", version, "/protein_aliases/", species, "__protein_aliases_tf.tsv.gz", sep=""), oD=input_directory)
+          aliases_type <<- "take_first"
+        }
+        
+        proteins <<- get_proteins()
         aliasDf <- read.table(temp, sep = "\t", header=TRUE, quote="", stringsAsFactors=FALSE, fill = TRUE)
         aliasDf = renameColDf(aliasDf, "protein_id", "STRING_id")
-        return(aliasDf)
+        aliasDf = subset(aliasDf, select=c("STRING_id", "alias"))
+        pr1=data.frame(STRING_id=proteins$protein_external_id, alias=proteins$protein_external_id, stringsAsFactors=FALSE)
+        pr2=data.frame(STRING_id=proteins$protein_external_id, alias=unlist(strsplit(proteins$protein_external_id, "\\."))[seq(from=2, to=2*nrow(proteins), by=2)], stringsAsFactors=FALSE)
+        aliasDf2=rbind(pr1,pr2,aliasDf)
+        aliases_tf <<- aliasDf2
+
+        return(aliasDf2)
       },
       
       
@@ -229,15 +259,18 @@ Author(s):
       
       
       
-      get_enrichment = function(string_ids, category = "Process", methodMT = "fdr", iea = TRUE){
+      get_enrichment = function(string_ids, category = "Process", methodMT = "fdr", iea = TRUE, minScore=NULL){
 '
 Description:
   Returns the enrichment in pathways of the vector of STRING proteins that is given in input.
 
 Input parameters:
   "string_ids"    a vector of STRING identifiers.
-  "category"      category for which to compute the enrichment (i.e. "Process", "Component", "Function", "KEGG", "Pfam", "InterPro".  default "Process")
+  "category"      category for which to compute the enrichment (i.e. "Process", "Component", "Function", "KEGG", "Pfam", "InterPro", "Tissue", "Disease".  default "Process")
   "methodMT"      method to be used for the multiple testing correction. (i.e.  "fdr", "bonferroni"..  default "fdr")
+  "iea"           specify whether to use Elettronic Inferred Annotations (TRUE/FALSE)
+  "minScore"      with Tissue and Disease categories is possible to filter the annotations with an annotation score higher than the threshold (from 0 to 5)
+
 
 Author(s):
    Andrea Franceschini
@@ -245,13 +278,25 @@ Author(s):
         ann = get_annotations()
         temp_category = category
         ann = subset(ann, category==temp_category)
+        if(!is.null(minScore) & category!="Tissue" & category!="Disease"){minScore=NULL}
+        if(!is.null(minScore)){
+          if(minScore <0 || minScore>5){cat("\nWARNING: minScore must be from 0 to 5 \n")}
+          ann = subset(ann, type>=minScore)
+        }
         if(!is.null(backgroundV)) ann = subset(ann, STRING_id %in% backgroundV )
         if(!iea) ann = subset(ann, type != "IEA")
+        if(nrow(ann)==0){
+          cat("\nWARNING: No annotations are present for this species with the following input parameters.
+              Please try to change species and/or parameters or try to contact our support.\n")
+          return(NULL)
+        }
         dfcount = suppressWarnings(sqldf('select term_id, count(STRING_id) as proteins from ann group by term_id', stringsAsFactors=FALSE))
         annHits = subset(ann, STRING_id %in% string_ids)
         dfcountHits = suppressWarnings(sqldf('select term_id, count(STRING_id) as hits from annHits group by term_id', stringsAsFactors=FALSE))
         dfcountMerged = merge(dfcount, dfcountHits, by.x="term_id", by.y="term_id", all.x=TRUE)
-        dfcountMerged2 = data.frame(dfcountMerged, n = length(unique(ann$STRING_id)) - dfcountMerged$proteins, k = length(unique(annHits$STRING_id)))
+        dfcountMerged = subset(dfcountMerged, proteins<=1500)
+        #dfcountMerged2 = data.frame(dfcountMerged, n = length(unique(ann$STRING_id)) - dfcountMerged$proteins, k = length(unique(annHits$STRING_id)))
+        dfcountMerged2 = data.frame(dfcountMerged, n = nrow(get_proteins()) - dfcountMerged$proteins, k = length(unique(annHits$STRING_id)))
         dfcountMerged3 = data.frame(dfcountMerged2, pvalue= phyper(dfcountMerged2$hits-1, dfcountMerged2$proteins, dfcountMerged2$n, dfcountMerged2$k, FALSE))
         dfcountMerged4 = dfcountMerged3
         if(!is.null(methodMT)) dfcountMerged4 = data.frame(dfcountMerged3, pvalue_fdr = p.adjust(dfcountMerged3$pvalue, method=methodMT, n=nrow(subset(dfcountMerged3, !is.na(pvalue))) ))
@@ -401,7 +446,7 @@ Author(s):
         if(is.null(required_score) ) required_score = score_threshold
         string_ids = unique(string_ids)
         urlStr = paste("http://string-db.org/version_",version,"/newstring_cgi/link_to.pl", sep="" )
-        #urlStr = paste("http://130.60.240.82:8818/newstring_cgi/link_to.pl", sep="" )
+        #urlStr = paste("http://130.60.240.90:8380/newstring_cgi/link_to.pl", sep="" )
         identifiers=""
         for(id in string_ids ){   identifiers = paste(identifiers, id, "%0D", sep="")}
         params=list(required_score=required_score, limit=0, network_flavor=network_flavor, identifiers=identifiers)
@@ -467,6 +512,7 @@ Author(s):
         string_ids = unique(string_ids)
         string_ids = string_ids[!is.na(string_ids)]
         urlStr = paste("http://string-db.org/version_", version, "/api/image/network", sep="" )
+        #urlStr = paste("http://130.60.240.90:8380/api/image/network", sep="" )
         identifiers=""
         for(id in string_ids ){ identifiers = paste(identifiers, id, "%0D", sep="")}
         params = list(output="image", required_score=required_score, limit=0, network_flavor=network_flavor, identifiers=identifiers)
@@ -750,21 +796,7 @@ Author(s):
    Andrea Franceschini
 '
 
-        aliasDf2=NULL
-        if(!takeFirst || length(aliases_tf)==0){        
-          if(takeFirst)
-            temp = downloadAbsentFileSTRING(paste("http://string.uzh.ch/permanent/string/", version, "/protein_aliases/", species, "__protein_aliases_tf.tsv.gz", sep=""), oD=input_directory)
-          else
-            temp = downloadAbsentFileSTRING(paste("http://string.uzh.ch/permanent/string/", version, "/protein_aliases/", species, "__protein_aliases.tsv.gz", sep=""), oD=input_directory)
-          
-          aliasDf <- read.table(temp, sep = "\t", header=TRUE, quote="", stringsAsFactors=FALSE, fill = TRUE)
-          aliasDf = renameColDf(aliasDf, "protein_id", "STRING_id")
-          aliasDf2 = subset(aliasDf, select=c("STRING_id", "alias"))
-          if(takeFirst) aliases_tf <<- aliasDf2
-        }else{
-          aliasDf2 = aliases_tf
-        }
-
+        aliasDf2=get_aliases(takeFirst)
 
         tempDf = multi_map_df(my_data_frame, aliasDf2, my_data_frame_id_col_names, "alias", "STRING_id")
         naDf = subset(tempDf, is.na(STRING_id))
@@ -822,8 +854,8 @@ Author(s):
         img = get_png(string_ids, payload_id=payload_id, required_score=required_score)
         if(!is.null(img)){
           plot(1:(dim(img)[2]), type='n', xaxt='n', yaxt='n', xlab="", ylab="", ylim=c(1,dim(img)[1]), xlim=c(1,(dim(img)[2])), asp = 1 )
-          if(add_summary) mtext(get_summary(string_ids), cex = 0.4)
-          if(add_link) mtext(get_link(string_ids, payload_id=payload_id, required_score=required_score), cex = 0.4, side=1)
+          if(add_summary) mtext(get_summary(string_ids), cex = 0.7)
+          if(add_link) mtext(get_link(string_ids, payload_id=payload_id, required_score=required_score), cex = 0.7, side=1)
           rasterImage(img, 1, 1, (dim(img)[2]), dim(img)[1])
         } 
       },
@@ -850,13 +882,15 @@ Author(s):
 '
         
         postFormParams = list(identifiers=paste(stringIds, collapse=" ") )
-        if(!is.null(colors)) postFormParams = c(postFormParams, colors=paste(colors, collapse=" "))
-        if(!is.null(comments)) postFormParams = c(postFormParams, comments=paste(comments, collapse=" "))
-        if(!is.null(links)) postFormParams = c(postFormParams, links=paste(links, collapse=" "))
-        if(!is.null(iframe_urls)) postFormParams = c(postFormParams, iframe_urls=paste(iframe_urls, collapse=" "))
-        if(!is.null(logo_imgF)) postFormParams = c(postFormParams, logo_img=fileUpload(logo_imgF))
-        if(!is.null(legend_imgF)) postFormParams = c(postFormParams, legend_img=fileUpload(legend_imgF))
+        if(!is.null(colors)) postFormParams = c(postFormParams, list(colors=paste(colors, collapse=" ")))
+        if(!is.null(comments)) postFormParams = c(postFormParams, list(comments=paste(comments, collapse="____")))
+        if(!is.null(links)) postFormParams = c(postFormParams, list(links=paste(links, collapse=" ")))
+        if(!is.null(iframe_urls)) postFormParams = c(postFormParams, list(iframe_urls=paste(iframe_urls, collapse=" ")))
+        if(!is.null(logo_imgF)) postFormParams = c(postFormParams, list(logo_img=fileUpload(logo_imgF)))
+        if(!is.null(legend_imgF)) postFormParams = c(postFormParams, list(legend_img=fileUpload(legend_imgF)))
         postRs = postFormSmart(paste("http://string-db.org/version_", version, "/newstring_cgi/webservices/post_payload.pl", sep=""),  .params = postFormParams)
+        
+        #postRs = postForm(paste("http://130.60.240.90:8380/newstring_cgi/webservices/post_payload.pl", sep=""),  .params = postFormParams, style = 'HTTPPOST')
         return(postRs)
       },
       
@@ -895,12 +929,124 @@ Author(s):
                 )
             )
         
-      }
+      },
     
       
-    )                     
-)
+    
 
+    enrichment_heatmap = function(genesVectors, vectorNames, output_file=NULL, title="", 
+                                  enrichmentType="Process", limitMultiPicture=NULL, fdr_threshold=0.05, pvalue_threshold=NULL, 
+                                  cexRow=NULL, cexCol=1, selectTermsVector=NULL, iea = TRUE, 
+                                  sortingMethod="rowMeans", useInputAsBackground=FALSE, limit=NULL){
+      
+      enrichList = list()
+      
+      if(useInputAsBackground) {
+        genes=genesVectors[[1]]
+        for(i in 2:length(genesVectors)){ genes=intersect(genes, genesVectors[[i]])  }
+        for(i in 1:length(genesVectors)){genesVectors[[i]] = intersect(genesVectors[[i]], genes)}
+        cat("INFO: we are benchmarking ",length(genes), "genes\n")
+      }else{
+        cat("WARNING: Your input has not been intersected; hence the datasets could not be perfectly comparable.\n")
+        for(i in 1:length(genesVectors)){genesVectors[[i]] = unique(genesVectors[[i]])}
+      }
+      
+      for(i in 1:length(genesVectors)){
+        genesInput = genesVectors[[i]]
+        if(!is.null(limit)) genesInput = genesVectors[[i]][0:limit]
+        stringGenes = mp(genesInput)
+        enrichList[[i]] = get_enrichment(stringGenes, category = enrichmentType, methodMT = "fdr", iea = iea )
+      }
+      enrichHash = hash()
+      for(i in 1:length(genesVectors)){
+        for(j in 1:nrow(enrichList[[i]])){
+          if((is.null(pvalue_threshold) || enrichList[[i]]$pvalue[j] <= pvalue_threshold) &&
+               (is.null(fdr_threshold) || enrichList[[i]]$pvalue_fdr[j] <= fdr_threshold) 
+          ){
+            enrichVect = rep(NA, length(genesVectors))
+            myterm = as.character(enrichList[[i]]$term_description[j])
+            
+            enter = FALSE
+            if(!is.null(selectTermsVector) ){ 
+              for(term in selectTermsVector){if(grepl(term, myterm)){enter=TRUE}}
+            }else{enter = TRUE}
+            
+            if(enter){
+              if(has.key(myterm, enrichHash)){  enrichVect = enrichHash[[myterm]] }
+              enrichVect[i] = -log(enrichList[[i]]$pvalue_fdr[j])
+              enrichHash[[myterm]] = enrichVect
+            }
+          }
+        }
+      }
+      
+      enrichMatr = matrix(NA, length(enrichHash), length(genesVectors))
+      rownames(enrichMatr) = rep(NA, length(keys(enrichHash)))
+      if(length(keys(enrichHash))>0){
+        for(i in 1:length(keys(enrichHash))){
+          k=keys(enrichHash)[i]
+          enrichMatr[i,] = enrichHash[[k]]
+          rownames(enrichMatr)[i] = k
+        }
+      }
+      colnames(enrichMatr) = vectorNames
+      
+      
+      if(is.null(limitMultiPicture)){limitMultiPicture= nrow(enrichMatr)+2}
+      if(!is.null(sortingMethod) && sortingMethod=="rowMeans" && nrow(enrichMatr)>1){
+        enrichMatr = enrichMatr[order(rowMeans(enrichMatr, na.rm=TRUE), decreasing=TRUE),]
+      }
+      
+      if(is.null(cexRow)){
+        if(nrow(enrichMatr) <= 60 ) {
+          cexRow=0.4 + 1/log(nrow(enrichMatr))
+        }else if(nrow(enrichMatr) <= 120 ) {
+          cexRow=0.2 + 1/log(nrow(enrichMatr))
+        }else if(nrow(enrichMatr) <= 200 ) {
+          cexRow=0.1 + 1/log2(nrow(enrichMatr))
+        }else{
+          cexRow=0.1
+        }
+        
+      }
+      
+      lmat = rbind(c(0,3),c(2,1),c(0,4))
+      lwid = c(0.7,5)
+      lhei = c(1,5,0.7)
+      
+      if(nrow(enrichMatr)%%limitMultiPicture == 1 && nrow(enrichMatr)!=1) limitMultiPicture=limitMultiPicture+1
+      if(nrow(enrichMatr)>1){
+        if(!is.null(output_file)) pdf(output_file, paper="a4", width=12, height=12, pagecentre=FALSE)
+        suppressWarnings(par(new=TRUE))
+        for(i in 1:ceiling(nrow(enrichMatr)/limitMultiPicture)){
+          enrichMatrTemp=enrichMatr[(limitMultiPicture*(i-1)+1):min(limitMultiPicture*(i), nrow(enrichMatr)),]
+          #heatmap(enrichMatrTemp, Rowv=NA, Colv = NA, col = brewer.pal(6,"Blues"), scale = "none",
+          #         margins = c(7,30),  cexRow=cexRow, cexCol=cexCol, main=paste("                                     ",title, sep=""))
+          tempV = c()
+          for(j in 1:ncol(enrichMatrTemp)){tempV = c(tempV, enrichMatrTemp[,j])}
+          tempV=unique(tempV[!is.na(tempV)])
+          
+          if(length(tempV)==1){
+            enrichMatrTemp[is.na(enrichMatrTemp)] <- 0 
+          }  
+          suppressWarnings(heatmap.2(enrichMatrTemp, density.info="none", trace="none", keysize=1,lmat = lmat, lhei=lhei, lwid=lwid,Rowv=NA, Colv = NA, col = brewer.pal(6,"Blues"), scale = "none",
+                                     margins = c(7,30),  cexRow=cexRow, cexCol=1, main=paste("                ",title, sep="")))
+        }  
+        if(!is.null(output_file)) dev.off()
+        suppressWarnings(par(new=FALSE))
+      }else if(nrow(enrichMatr)==1){
+        cat("Only one term has been found to be significantly enriched:\n")
+        print(enrichMatr)
+      }else{cat("No enriched terms below the p-value threshold.")}
+      return(enrichMatr)
+    }
+
+
+
+
+
+)
+)
 
 
 get_STRING_species = function(version="9_05", species_name=NULL){
@@ -924,6 +1070,7 @@ get_STRING_species = function(version="9_05", species_name=NULL){
   }
   return(speciesDf)
 }
+
 
 
 

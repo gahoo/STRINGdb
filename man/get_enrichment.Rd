@@ -7,7 +7,7 @@ get_enrichment
 Returns the enrichment in pathways of the vector of STRING proteins that is given in input.
 }
 \usage{
-\S4method{get_enrichment}{STRINGdb}(string_ids, category = "Process", methodMT = "fdr", iea = TRUE)
+\S4method{get_enrichment}{STRINGdb}(string_ids, category = "Process", methodMT = "fdr", iea = TRUE, minScore=NULL)
 }
 \arguments{
   \item{string_ids}{
@@ -21,6 +21,9 @@ method to be used for the multiple testing correction. (i.e.  "fdr", "bonferroni
 }
   \item{iea}{
 specify whether you also want to use electronic inference annotations
+}
+  \item{minScore}{
+with Tissue and Disease categories is possible to filter the annotations having an annotation score higher than this threshold (from 0 to 5)
 }
 }
 \value{

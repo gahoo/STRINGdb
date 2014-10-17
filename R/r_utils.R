@@ -15,7 +15,8 @@ postFormSmart <- function(uri, ..., .params = list(), .opts = curlOptions(url = 
              .encoding = .encoding, binary = binary, .checkParams = .checkParams,
              .contentEncodeFun = .contentEncodeFun)
   
-    if(grepl("The document has moved", res)){
+    
+    suppressWarnings( if(grepl("The document has moved", res)){
     
       begin <- regexpr("href",res)+6
       mys2=substr(res, begin, 10000000)
@@ -26,7 +27,7 @@ postFormSmart <- function(uri, ..., .params = list(), .opts = curlOptions(url = 
                curl = curl, style = style,
                .encoding = .encoding, binary = binary, .checkParams = .checkParams,
                .contentEncodeFun = .contentEncodeFun)
-    } 
+    } )
     
     return(res)
   

@@ -215,18 +215,12 @@ head(enrichmentKEGG, n=7)
 \end{Sinput}
 \end{Schunk}
 
-
 If you have performed your experiment on a pre-defined set of proteins, it is important to run the enrichment statistics using that set as a background (otherwise you would get a wrong p-value !). Hence, before to launch the methods explained above, you should set the background:
 
 <<background, eval=FALSE>>=
 backgroundV <- example1_mapped$STRING_id[1:2000]   # as an example, we use the first 2000 genes                                                    
 string_db$set_background(backgroundV)
 @
-\begin{Schunk}
-\begin{Sinput}
-
-\end{Sinput}
-\end{Schunk}
 
 You can also set the background when you instantiate the STRINGdb object:
 
@@ -239,8 +233,13 @@ string_db <- STRINGdb$new( score_threshold=0, backgroundV = backgroundV )
 
 \end{Sinput}
 \end{Schunk}
+If you want to compare the enrichment of two or more lists of genes (e.g. the results of two experiments), you can use our HEATMAP visualization option:
 
-
+<<enrichmentHeatmap, eval=FALSE>>=
+eh <- string_db$enrichment_heatmap( list( hits[1:100], hits[101:200]),
+                                    list("list1","list2"), title="My Lists" )
+@
+\includegraphics{heatmap_enrichment_example.pdf}
 
 \section{CLUSTERING}
 
