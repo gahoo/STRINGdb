@@ -14,7 +14,7 @@
 \SweaveOpts{concordance=TRUE, strip.white=false}
 \title{STRINGdb Package Vignette}
 \author{Andrea Franceschini}
-\date{15 July 2013}
+\date{15 March 2015}
 \maketitle
 
 \begin{Schunk}
@@ -42,7 +42,7 @@ If you don't know that, you can search the NCBI Taxonomy (http://www.ncbi.nlm.ni
 Hence, if your species is not Human (i.e. our default species), you can use this function to retrieve/search our species table:
 
 <<species, eval=FALSE>>=
-get_STRING_species(version="9_05", species_name=NULL)
+get_STRING_species(version="10", species_name=NULL)
 @ 
 
 
@@ -55,7 +55,7 @@ get_STRING_species(version="9_05", species_name=NULL)
 
 <<initialization>>=
 library(STRINGdb)
-string_db <- STRINGdb$new( version="9_05", species=9606, 
+string_db <- STRINGdb$new( version="10", species=9606, 
                            score_threshold=0, input_directory="" )
 @
 
@@ -215,7 +215,7 @@ head(enrichmentKEGG, n=7)
 \end{Sinput}
 \end{Schunk}
 
-If you have performed your experiment on a pre-defined set of proteins, it is important to run the enrichment statistics using that set as a background (otherwise you would get a wrong p-value !). Hence, before to launch the methods explained above, you should set the background:
+If you have performed your experiment on a predefined set of proteins, it is important to run the enrichment statistics using that set as a background (otherwise you would get a wrong p-value !). Hence, before to launch the methods explained above, you should set the background:
 
 <<background, eval=FALSE>>=
 backgroundV <- example1_mapped$STRING_id[1:2000]   # as an example, we use the first 2000 genes                                                    
@@ -319,13 +319,13 @@ string_db$get_neighbors( c(tp53, atm) )
 \end{Schunk}
 
 It is also possible to retrieve the interactions that connect certain input proteins between each other.\\
-Using the "get-interactions" method we can clearly see that TP53 and ATM interact with each other with a good evidence/score.
+Using the "get\_interactions" method we can clearly see that TP53 and ATM interact with each other with a good evidence/score.
 
 <<interactions>>=
 string_db$get_interactions( c(tp53, atm) )
 @
 
-Using the get-pubmed-interactions method we can retrieve the pubmed identifiers of the articles that contain the name of both the proteins (if any). Such articles could support to the interaction.
+Using the get\_pubmed\_interactions method we can retrieve the pubmed identifiers of the articles that contain the name of both the proteins (if any). Such articles could support to the interaction.
 
 <<pubmedInteractions, eval=FALSE>>=
 string_db$get_pubmed_interaction( tp53, atm )
@@ -339,7 +339,7 @@ string_db$get_pubmed_interaction( tp53, atm )
 
 
 STRING also provides a way to get homologous proteins: in our database we store an ALL-AGAINST-ALL blast alignment of all our 5 million proteins.
-The method "get-homologs-besthits" can be used to get the best hits of your proteins in all the >1000 STRING species (with the "symbets" parameter you can limit the search to the reciprocal-best-hits.  This increase the confidence to get orthologs and not paralogous proteins)
+The method "get\_homologs\_besthits" can be used to get the best hits of your proteins in all the >1000 STRING species (with the "symbets" parameter you can limit the search to the reciprocal\_best\_hits.  This increase the confidence to get orthologs and not paralogous proteins)
 
 <<homologs, eval=FALSE>>=
 # get the reciprocal best hits of the following protein in all the STRING species
@@ -365,6 +365,55 @@ string_db$get_homologs(c(tp53, atm), target_species_id=10090, bitscore_threshold
 \end{Sinput}
 \end{Schunk}
 
+
+
+\section{BENCHMARKING PROTEIN-PROTEIN INTERACTIONS}
+
+When a new methodology/algorithm to infer protein-protein interactions is developed, the outcome should be carefully benchmarked against a gold standard.
+Hence, we suggest to benchmark agains the KEGG pathway database (or other high quality pathway databases), and we provide suitable functions to perform this task.
+
+First of all, you need to provide as input a sorted interaction data frame (with the columns "proteinA", "proteinB", "score").
+
+<<benchmark1, eval=TRUE>>=
+data(interactions_example)
+
+interactions_benchmark = string_db$benchmark_ppi(interactions_example, pathwayType = "KEGG", 
+		max_homology_bitscore = 60, precision_window = 400, exclude_pathways = "blacklist")
+@
+
+The function benchmark\_ppi will return a data frame containing the sorted list of protein interactions mapped to the benchmark, and the precision computed in a sliding window of 400 interactions (that automatically expands/shrink at the beginning/end of the sorted interactions list).
+The precision is defined as the number of TP interactions (where the pair of proteins are both present together in at least one pathway) vs the total number of interactions in the window.
+When benchmarking PPI it is often important to remove the interactions composed by a pair of homologous protein. You can set a parameter in the function to automatically perform this task (max\_homology\_bitscore).
+The user may also want to remove several uninformative pathway from the gold standard (i.e. pathways that are too big or too generic ). The STRING team manually curates a black list of KEGG pathways that in our opinion should be removed in order to provide a reliable gold standard. With the "exclude\_pathways" parameter it is possible to automatically remove those pathways from the analysis (setting the parameter to "blacklist") or to specify a vector contaning the term identifiers of the pathways that the user wants to remove.
+
+It is finally very easy to plot the precision vs the number of sorted interactions:
+
+<<echo=false>>=
+options(SweaveHooks=list(fig=function()
+par(mar=c(4.1, 4.1, 4.1, 2.1))))
+@
+\setkeys{Gin}{width=0.8\linewidth}
+<<benchmark2, eval=TRUE, fig=TRUE>>=
+plot(interactions_benchmark$precision, ylim=c(0,1), type="l", xlim=c(0,700),
+	 xlab="interactions", ylab="precision")
+@
+
+We also provide a function to list the pathways to which the various TP interactions belong, together with some accompanying statistic:
+
+<<benchmark3, eval=TRUE>>=
+interactions_pathway_view = string_db$benchmark_ppi_pathway_view(interactions_benchmark, precision_threshold=0.2, pathwayType = "KEGG")
+head(interactions_pathway_view)
+@
+
+For each pathway for which a TP interaction is found in the sorted interaction list, we report its "total\_representation" (i.e. which percentages of interactions belong to that pathway), the "coverage" (i.e. number of interactions of the input list in the pathway / total number of possible interactions in the pathway) and the size of the pathway in number of proteins.
+
+\begin{Schunk}
+\begin{Sinput}
+                                          
+
+
+\end{Sinput}
+\end{Schunk}
 
 
 \section{CITATION}

@@ -125,6 +125,33 @@ downloadAbsentFile <- function(urlStr, oD = tempdir()){
 # }
 
 
+
+# Merge preserving the original order if sort==FALSE (this doesn't happen in the original merge implementation)
+merge.with.order <- function(x,y, ..., sort = T)
+{
+  # this function works just like merge, only that it adds the option to return the merged data.frame ordered by x (1) or by y (2)
+  add.id.column.to.data <- function(DATA)
+  {
+    data.frame(DATA, id... = seq_len(nrow(DATA)))
+  }
+  # add.id.column.to.data(data.frame(x = rnorm(5), x2 = rnorm(5)))
+  order.by.id...and.remove.it <- function(DATA)
+  {
+    # gets in a data.frame with the "id..." column.  Orders by it and returns it
+    if(!any(colnames(DATA)=="id...")) stop("The function order.by.id...and.remove.it only works with data.frame objects which includes the 'id...' order column")
+    
+    ss_r <- order(DATA$id...)
+    ss_c <- colnames(DATA) != "id..."
+    DATA[ss_r, ss_c]
+  }
+  
+  if(sort==F){ return(order.by.id...and.remove.it(merge(x=add.id.column.to.data(x),y=y,..., sort = FALSE)))
+  } else {return(merge(x=x,y=y,..., sort = sort))}
+  
+}
+
+
+
 # mapping function (add the possibility to map using more than one column)
 multi_map_df <- function(dfToMap, dfMap, strColsFrom, strColFromDfMap, strColToDfMap, caseSensitive=FALSE){
   
@@ -138,12 +165,12 @@ multi_map_df <- function(dfToMap, dfMap, strColsFrom, strColFromDfMap, strColToD
   if(!caseSensitive){ dfMap[,strColFromDfMap] = toupper(iconv(dfMap[,strColFromDfMap], "WINDOWS-1252", "UTF-8")) }
   
   dfMap2 = unique(subset(dfMap, select=c(strColFromDfMap, strColToDfMap)))
-  df2 = merge(dfToMap, dfMap2, by.x=strColsFrom[1], by.y=strColFromDfMap, all.x=TRUE, sort=FALSE)
+  df2 = merge.with.order(dfToMap, dfMap2, by.x=strColsFrom[1], by.y=strColFromDfMap, all.x=TRUE, sort=FALSE)
   if(length(strColsFrom) > 1){
     for(i in 2:length(strColsFrom)){
       dfna = delColDf(subset(df2, is.na(as.vector(df2[, strColToDfMap]))), strColToDfMap)
       dfgood = subset(df2, !is.na(as.vector(df2[, strColToDfMap])))
-      df3 = merge(dfna, dfMap2, by.x=strColsFrom[i], by.y=strColFromDfMap, all.x=TRUE, sort=FALSE)
+      df3 = merge.with.order(dfna, dfMap2, by.x=strColsFrom[i], by.y=strColFromDfMap, all.x=TRUE, sort=FALSE)
       df2 = rbind(dfgood, df3)
     }  
   }

@@ -7,7 +7,7 @@ get_STRING_species
 Returns a data frame with the species (i.e. organisms) that are present in STRING.
 }
 \usage{
-get_STRING_species(version="9_05", species_name=NULL)
+get_STRING_species(version=NULL, species_name=NULL)
 }
 \arguments{
   \item{version}{

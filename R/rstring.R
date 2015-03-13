@@ -5,6 +5,7 @@ STRINGdb <- setRefClass("STRINGdb",
       annotations="data.frame",
       annotations_description="data.frame",
       graph="igraph",
+      homology_graph="igraph",
       proteins="data.frame",
       aliases_tf="data.frame",
       aliases_type="character",
@@ -13,7 +14,8 @@ STRINGdb <- setRefClass("STRINGdb",
       version="character",    
       input_directory="character",
       backgroundV = "vector",
-      score_threshold = "numeric"
+      score_threshold = "numeric",
+      pathways_benchmark_blackList="data.frame"
     ),
     methods = list(
       
@@ -68,16 +70,18 @@ Author(s):
           species <<- 9606                        
         }
         if(length(version)==0) {
-          cat("WARNING: You didn't specify a version of the STRING database to use. Hence we will use STRING 9_1.\n")
-          version <<- "9_1"                        
           current_version = as.character(read.table(url("http://string.uzh.ch/permanent/string/current_version"))$V1)
-          if(current_version != version) cat("WARNING: A new version of the STRING R plugin has been released: we suggest you to install the latest version from Bioconductor.\n")
+          cat("WARNING: You didn't specify a version of the STRING database to use. Hence we will use STRING", current_version,"\n")
+          version <<- current_version
         }else{
           valid_versions = read.table(url("http://string.uzh.ch/permanent/string/r_lib_valid_versions"))$V1
           if(! (version %in% valid_versions)) {
             cat("ERROR: The version ", version, "is not valid. \nPlease use one of the following versions:\n")
             cat(as.character(valid_versions), sep=", ")
             stop()
+          }else{
+            current_version = as.character(read.table(url("http://string.uzh.ch/permanent/string/current_version"))$V1)
+            if(current_version != version) cat("WARNING: A new version of the STRING R plugin has been released: we suggest you to install the latest version from Bioconductor.\n")
           }
         }
         if(input_directory=="" || is.null(input_directory) || length(input_directory)==0) input_directory<<-tempdir()
@@ -85,7 +89,161 @@ Author(s):
         aliases_type <<- "take_first"
       },
                           
-      
+
+benchmark_ppi = function(interactions_dataframe, pathwayType = "KEGG", max_homology_bitscore = 60, precision_window=400, exclude_pathways="blacklist"){
+  'Description:  
+    benchmark a list of protein-protein interactions using pathways (e.g. KEGG). 
+    The function outputs a table where the interactions are mapped to KEGG and the number of TPs and FPs are counted.
+
+Input parameters:
+      "interactions_dataframe"  a data frame of protein-protein interactions, having the following column names: "proteinA", "proteinB", "score"
+      "pathwayType"    the annotation category that we want to use for benchmarking
+      "max_homology_bitscore"  if this variable is set, we remove the homologous proteins from the benchmark that have a bitscore higher than this variable
+      "precision_window"   size of a window used to estimate the precision (i.e. the list of protein-protein interactions is scanned with a window
+                          and the precision is estimated only for the proteins in the window. The precision value that is reported in every row is the middle point of the window).
+                          At the beginning and at the end of the ppi list, the window is automatically expanded (and reduced).
+      "exclude_pathways"   Vector of terms (i.e. pathways) to exclude from benchmarking. By default, the vector is set to "blacklist" which means that a curated set 
+                                of "dangerous" pathways is removed from the analysis.
+
+Author(s):
+   Andrea Franceschini
+
+  '
+  
+        if(!(names(interactions_dataframe)[1]=="proteinA" && names(interactions_dataframe)[2]=="proteinB" && names(interactions_dataframe)[3]=="score")){
+          cat("ERROR: \nthe input dataframe should contain an header with the following names: proteinA, proteinB, score")
+          stop()
+        }
+        if(!is.null(max_homology_bitscore)) {interactions_dataframe = remove_homologous_interactions(interactions_dataframe, max_homology_bitscore)}
+        
+        ann=get_annotations()
+        annCat=subset(ann, category==pathwayType)
+        if(!is.null(exclude_pathways)){
+          bbl=exclude_pathways
+          if("blacklist" %in% exclude_pathways) {
+            bbl=c(bbl, (get_pathways_benchmarking_blackList())$term_id)
+          }
+          annCat = subset(annCat, !(term_id %in% bbl))
+        }
+        protein_pathways = hash()
+        temp=apply(annCat, 1,
+                   function(x){
+                     paths=c()
+                     if(!is.null(protein_pathways[[x[1]]])){paths=protein_pathways[[x[1]]]}
+                     paths=c(paths, x[2])
+                     protein_pathways[[x[1]]]=paths
+                   }
+        )
+        
+        
+        mappedNonHomologousIntDf=subset(interactions_dataframe, proteinA %in% unique(annCat$STRING_id) & proteinB %in% unique(annCat$STRING_id))
+        cat("NOTE: ", nrow(mappedNonHomologousIntDf), "interactions (", round((nrow(mappedNonHomologousIntDf)/nrow(interactions_dataframe))*100, digits=1), "% )", "have been mapped to", pathwayType, "\n")
+        if(nrow(mappedNonHomologousIntDf)<precision_window){
+          precision_window=nrow(mappedNonHomologousIntDf)-1
+          cat("WARNING: The size of the precision window is larger than the number of mapped interactions. \n     We reduce the size of the precision window to ", precision_window)
+        }
+  
+        outcome=rep("FP", nrow(mappedNonHomologousIntDf))
+        numTP=rep(0, nrow(mappedNonHomologousIntDf))
+        numFP=rep(0, nrow(mappedNonHomologousIntDf))
+        pathways=rep(NA, nrow(mappedNonHomologousIntDf))
+        acc=rep(0, nrow(mappedNonHomologousIntDf))
+        counter=0
+        tps=0
+        fps=0
+        proteinsA=mappedNonHomologousIntDf$proteinA
+        proteinsB=mappedNonHomologousIntDf$proteinB
+        for(counter in seq(1:nrow(mappedNonHomologousIntDf))){
+          x=c(proteinsA[counter], proteinsB[counter])
+          paths=c()
+          if(!is.null(protein_pathways[[x[1]]]) && !is.null(protein_pathways[[x[1]]]) && length(intersect(protein_pathways[[x[1]]],protein_pathways[[x[2]]]))>0){
+            outcome[counter]="TP"
+            tps=tps+1
+            pathways[counter]=paste((intersect(protein_pathways[[x[1]]],protein_pathways[[x[2]]])), collapse=" ")
+          }else{
+            fps=fps+1
+          }
+          numTP[counter]=tps
+          numFP[counter]=fps
+          
+          if(counter<=precision_window){
+            acc[floor(counter/2)] = tps/(tps+fps)
+          }else{
+            acc[floor(counter - (precision_window/2))] = (tps-numTP[counter-precision_window])/((tps-numTP[counter-precision_window])+(fps-numFP[counter-precision_window]))
+          }
+          
+          if(counter>=(nrow(mappedNonHomologousIntDf)-precision_window/2)){
+            acc[counter] = (tps-numTP[ceiling(counter-((precision_window)/2))])/((tps-numTP[ceiling(counter-((precision_window)/2))])+(fps-numFP[ceiling(counter-((precision_window)/2))]))
+          }
+          
+        }
+        mappedNonHomologousIntDf2 = data.frame(nTP=numTP, nFP=numFP, mappedNonHomologousIntDf, outcome=outcome, precision=acc, pathways = pathways, stringsAsFactors=FALSE)
+        
+        return(mappedNonHomologousIntDf2)
+},
+
+
+benchmark_ppi_pathway_view = function(benchmark_ppi_data_frame, precision_threshold=0.2, pathwayType = "KEGG"){
+  'Description:  
+    Takes in input the results of the "benchmark_ppi" function, and constructs a new table that provides a view at the pathway level 
+    (i.e. it list all the pathways of the interactions)
+
+Input parameters:
+      "benchmark_ppi_data_frame"  a data frame that comes out as result from the "benchmark_ppi" function
+      "precision_threshold"    precision threshold after which to stop reading the interactions.
+     
+Author(s):
+   Andrea Franceschini
+
+  '
+  
+  ann=get_annotations()
+  annCat=subset(ann, category==pathwayType)
+  pathway_proteinsNum = hash()
+  temp=apply(annCat, 1,
+             function(x){
+               paths=0
+               if(!is.null(pathway_proteinsNum[[x[2]]])){paths=pathway_proteinsNum[[x[2]]]}
+               paths=paths+1
+               pathway_proteinsNum[[x[2]]]=paths
+             }
+  )
+  
+  benchmark_ppi_data_frame2=subset(benchmark_ppi_data_frame,!is.na(pathways))
+  totalInteractions = 0
+  pathway_interactions=hash()
+  inside=TRUE
+  precisions = benchmark_ppi_data_frame2$precision
+  pathways = as.character(benchmark_ppi_data_frame2$pathways)
+  for(i in seq(1:nrow(benchmark_ppi_data_frame2))){
+    if(precisions[i]<=precision_threshold){inside=FALSE}
+    if(inside){
+      totalInteractions=totalInteractions+1
+      splitted=strsplit(pathways[i], " ")[[1]]
+      sapply(splitted, function(y){
+        if(is.null(pathway_interactions[[y]])){pathway_interactions[[y]]=0}
+        pathway_interactions[[y]]=pathway_interactions[[y]]+1
+      }
+      )
+    }
+  }
+  
+  repdf=data.frame(coverage=numeric(), proteins=numeric(), interactions=numeric(), total_representation=numeric(), stringsAsFactors=FALSE)
+  i=0
+  for(ke in keys(pathway_interactions)){
+    i=i+1
+    interactions2 = pathway_interactions[[ke]]
+    proteins2 = pathway_proteinsNum[[ke]]
+    coverage = round(interactions2/((proteins2 * (proteins2-1))/2), digits=3)
+    total_representation = round(interactions2/totalInteractions, digits=6)
+    repdf[i,] = c(coverage, proteins2, interactions2, total_representation)
+  }
+  repdf2=data.frame(pathways=keys(pathway_interactions), repdf, stringsAsFactors=FALSE)
+  repdf3=merge(repdf2, get_annotations_desc(), by.x="pathways", by.y="term_id", all.x=TRUE)
+  return(arrange(repdf3, -total_representation))
+},
+
+
       load_all = function(){
 '
 Description:
@@ -146,8 +304,14 @@ Author(s):
         pr1=data.frame(STRING_id=proteins$protein_external_id, alias=proteins$preferred_name, stringsAsFactors=FALSE)        
         pr2=data.frame(STRING_id=proteins$protein_external_id, alias=proteins$protein_external_id, stringsAsFactors=FALSE)
         pr3=data.frame(STRING_id=proteins$protein_external_id, alias=unlist(strsplit(proteins$protein_external_id, "\\."))[seq(from=2, to=2*nrow(proteins), by=2)], stringsAsFactors=FALSE)
-        if(takeFirst){aliasDf = subset(aliasDf, !(alias %in% proteins$preferred_name) & !(alias %in% proteins$protein_external_id) )  }
-	aliasDf2=rbind(pr1,pr2,pr3,aliasDf)
+        
+        #if(takeFirst){aliasDf = subset(aliasDf, !(alias %in% proteins$preferred_name) & !(alias %in% proteins$protein_external_id) )  }
+        if(takeFirst){aliasDf = subset(aliasDf, !(toupper(iconv(alias, "WINDOWS-1252", "UTF-8")) %in% toupper(proteins$preferred_name)) & 
+                                         !(toupper(iconv(alias, "WINDOWS-1252", "UTF-8")) %in% toupper(proteins$protein_external_id))  &
+                                          !(toupper(iconv(alias, "WINDOWS-1252", "UTF-8")) %in% toupper(unlist(strsplit(proteins$protein_external_id, "\\."))[seq(from=2, to=2*nrow(proteins), by=2)])) )
+        }
+        
+        aliasDf2=rbind(pr1,pr2,pr3, aliasDf)
         aliases_tf <<- aliasDf2
 
         return(aliasDf2)
@@ -170,7 +334,7 @@ Author(s):
           ann = renameColDf(ann, "V1", "STRING_id")
           ann = renameColDf(ann, "V2", "term_id")
           ann = renameColDf(ann, "V3", "category")
-          annotations <<- renameColDf(ann, "V4", "type")
+          annotations <<- unique(renameColDf(ann, "V4", "type"))
         }
         return(annotations)
       },
@@ -292,14 +456,14 @@ Author(s):
               Please try to change species and/or parameters or try to contact our support.\n")
           return(NULL)
         }
-        dfcount = suppressWarnings(sqldf('select term_id, count(STRING_id) as proteins from ann group by term_id', stringsAsFactors=FALSE))
+        dfcount = suppressWarnings(sqldf('select term_id, count(STRING_id) as proteinsCount from ann group by term_id', stringsAsFactors=FALSE))
         annHits = subset(ann, STRING_id %in% string_ids)
         dfcountHits = suppressWarnings(sqldf('select term_id, count(STRING_id) as hits from annHits group by term_id', stringsAsFactors=FALSE))
         dfcountMerged = merge(dfcount, dfcountHits, by.x="term_id", by.y="term_id", all.x=TRUE)
-        dfcountMerged = subset(dfcountMerged, proteins<=1500)
+        dfcountMerged = subset(dfcountMerged, proteinsCount<=1500)
         #dfcountMerged2 = data.frame(dfcountMerged, n = length(unique(ann$STRING_id)) - dfcountMerged$proteins, k = length(unique(annHits$STRING_id)))
-        dfcountMerged2 = data.frame(dfcountMerged, n = nrow(get_proteins()) - dfcountMerged$proteins, k = length(unique(annHits$STRING_id)))
-        dfcountMerged3 = data.frame(dfcountMerged2, pvalue= phyper(dfcountMerged2$hits-1, dfcountMerged2$proteins, dfcountMerged2$n, dfcountMerged2$k, FALSE))
+        dfcountMerged2 = data.frame(dfcountMerged, n = nrow(get_proteins()) - dfcountMerged$proteinsCount, k = length(unique(annHits$STRING_id)))
+        dfcountMerged3 = data.frame(dfcountMerged2, pvalue= phyper(dfcountMerged2$hits-1, dfcountMerged2$proteinsCount, dfcountMerged2$n, dfcountMerged2$k, FALSE))
         dfcountMerged4 = dfcountMerged3
         if(!is.null(methodMT)) dfcountMerged4 = data.frame(dfcountMerged3, pvalue_fdr = p.adjust(dfcountMerged3$pvalue, method=methodMT, n=nrow(subset(dfcountMerged3, !is.na(pvalue))) ))
         dfcountMerged4 = subset(dfcountMerged4, !is.na(pvalue))
@@ -307,6 +471,7 @@ Author(s):
         dfcountMerged4 = delColDf(dfcountMerged4, "k")
         annDesc = get_annotations_desc()
         dfcountMerged5 = arrange(merge(dfcountMerged4, annDesc, by.x="term_id", by.y="term_id", all.x=TRUE), pvalue)
+        dfcountMerged5 = renameColDf(dfcountMerged5, "proteinsCount", "proteins")  
         return(dfcountMerged5)
       },
       
@@ -371,7 +536,22 @@ Author(s):
       },
       
       
-      
+      get_homology_graph = function(min_homology_bitscore=60){
+        temp = downloadAbsentFile(paste("http://string.uzh.ch/permanent/string/", version, "/homology_links/",
+                                        species, "_homology_links.tsv.gz", sep=""), oD=input_directory)
+        PPI <- read.table(temp, sep = "\t", header=TRUE, stringsAsFactors=FALSE, fill = TRUE)
+        
+        PPIselected = PPI
+        if(!is.null(min_homology_bitscore)) PPIselected <- PPI[PPI$bitscore >= min_homology_bitscore,]
+        if(!is.null(backgroundV)){
+          PPIselected <- PPIselected[PPIselected$protein1 %in% backgroundV,]
+          PPIselected <- PPIselected[PPIselected$protein2 %in% backgroundV,]
+        }
+        
+        myg = graph.data.frame(PPIselected,FALSE)
+        homology_graph <<- myg
+        return(myg)
+      },
       
       
       get_homologs_besthits = function(string_ids, symbets = FALSE, target_species_id = NULL, bitscore_threshold=NULL){
@@ -489,6 +669,17 @@ Author(s):
       },
       
       
+      get_pathways_benchmarking_blackList = function(){
+        '
+Description:
+  Returns a list of pathways that we suggests to exclude for benchmarking (at the moment our list includes only KEGG maps)
+
+'
+        if(nrow(pathways_benchmark_blackList)==0){
+          temp = downloadAbsentFile(paste("http://string.uzh.ch/permanent/string/", version, "/benchmarking_blacklist.tsv", sep=""), oD=input_directory)
+          pathways_benchmark_blackList <<- read.table(temp, sep = "\t", header=TRUE, stringsAsFactors=FALSE, fill = TRUE, quote="", colClasses=c("character", "character"))
+        }else{return(pathways_benchmark_blackList)}
+      },
       
       
       get_png = function(string_ids, required_score=NULL, network_flavor="evidence", file=NULL, payload_id=NULL){
@@ -896,6 +1087,39 @@ Author(s):
         return(postRs)
       },
       
+
+
+remove_homologous_interactions = function(interactions_dataframe, bitscore_threshold = 60){
+  '
+Description:
+  With this method it is possible to remove the interactions that are composed by a pair of homologous/similar proteins, having a similarity bitscore between each other higher than a threshold.
+
+Input parameters:
+  "interactions_dataframe"  a data frame of protein-protein interactions, having the following column names: "proteinA", "proteinB", "score"
+  "bitscore_threshold"       bitscore threshold used to detect the homology (two proteins are considered homologs, if their similarity bitscore is higher than this threshold)
+
+Author(s):
+   Andrea Franceschini
+'
+      if(!(names(interactions_dataframe)[1]=="proteinA" && names(interactions_dataframe)[2]=="proteinB" && names(interactions_dataframe)[3]=="score")){
+        cat("ERROR: \nthe input dataframe should contain an header with the following names: proteinA, proteinB, score")
+        stop()
+      }
+      interactions_dataframe=data.frame(interactions_dataframe, score_temp_sort_abc = seq(1:nrow(interactions_dataframe)))
+      interactionsGraph = graph.data.frame(interactions_dataframe,FALSE)
+      hg=get_homology_graph(bitscore_threshold)
+      nonHomologousIntGraph = graph.difference(interactionsGraph, hg)
+      nonHomologousIntDf=get.data.frame(nonHomologousIntGraph)
+      names(nonHomologousIntDf)=names(interactions_dataframe)
+      nonHomologousIntDf=arrange(nonHomologousIntDf, score_temp_sort_abc)
+      nonHomologousIntDf=delColDf(nonHomologousIntDf, "score_temp_sort_abc")
+      cat("Discarded", nrow(interactions_dataframe)-nrow(nonHomologousIntDf), "interactions (", 
+          (nrow(interactions_dataframe)-nrow(nonHomologousIntDf))*100/nrow(interactions_dataframe),"% )", " between homologous proteins\n")
+      return(nonHomologousIntDf)
+},
+
+
+
       
       set_background = function(background_vector){
 '
@@ -1051,7 +1275,7 @@ Author(s):
 )
 
 
-get_STRING_species = function(version="9_05", species_name=NULL){
+get_STRING_species = function(version=NULL, species_name=NULL){
   
 #   Input parameters:
 #   "species_name"      name of the species that you are searching (e.g. "Homo")
@@ -1063,7 +1287,10 @@ get_STRING_species = function(version="9_05", species_name=NULL){
 #   Andrea Franceschini
   
   
-  
+  if(is.null(version)){
+    version = as.character(read.table(url("http://string.uzh.ch/permanent/string/current_version"))$V1)
+    cat("NOTE: You didnt' specify a version of the STRING dabase. Hence we use the current version:", version)
+  }
   temp = downloadAbsentFile(paste("http://string.uzh.ch/permanent/string/", version, "/species.tsv", sep=""), oD=tempdir())
   speciesList <- read.table(temp, sep = "\t", header=TRUE, stringsAsFactors=FALSE, fill = TRUE)  
   speciesDf = speciesList
