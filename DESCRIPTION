@@ -2,7 +2,7 @@ Package: STRINGdb
 Type: Package
 Title: STRINGdb (Search Tool for the Retrieval of Interacting proteins
         database)
-Version: 1.11.0
+Version: 1.11.1
 Date: 2015-03-15
 Author: Andrea Franceschini <andrea.franceschini@isb-sib.ch>
 Maintainer: Andrea Franceschini <andrea.franceschini@isb-sib.ch>
@@ -13,4 +13,4 @@ License: GPL-2
 Depends: R (>= 2.14.0), png, sqldf, plyr, igraph, RCurl, plotrix, methods, RColorBrewer, gplots, hash
 Suggests: RUnit, BiocGenerics
 biocViews: Network
-
+PackageStatus: Deprecated
