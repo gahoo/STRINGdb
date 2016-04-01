@@ -1,8 +1,8 @@
+\docType{class}
 \name{STRINGdb-class}
 \Rdversion{1.1}
-\docType{class}
 \alias{STRINGdb-class}
-\alias{get_species}
+\alias{STRINGdb}
 
 \title{Class \code{"STRINGdb"}}
 \description{

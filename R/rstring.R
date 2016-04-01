@@ -1145,7 +1145,7 @@ Author(s):
           "***********  STRING - http://string-db.org   ***********", "\n",
           "(Search Tool for the Retrieval of Interacting Genes/Proteins)  ", "\n",
           "version: ", version, "\n",
-          "species: ", species, "    ", subset(get_STRING_species(), species_id==species)$official_name, "\n", 
+          "species: ", species, "\n", 
           "............please wait............\n", sep=""
         ))
         
@@ -1295,7 +1295,7 @@ get_STRING_species = function(version=NULL, species_name=NULL){
   speciesList <- read.table(temp, sep = "\t", header=TRUE, stringsAsFactors=FALSE, fill = TRUE)  
   speciesDf = speciesList
   if(!is.null(species_name)){
-    speciesDf = subset(speciesDf, grepl(species_name, official_name))
+    speciesDf = subset(speciesDf, grepl(species_name, 'official_name'))
   }
   return(speciesDf)
 }

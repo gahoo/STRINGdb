@@ -1,6 +1,6 @@
 export(
   STRINGdb,
-  coeffOfvar, 
+  coeffOfvar,
   delColDf,
   downloadAbsentFile,
   downloadAbsentFileSTRING,
@@ -19,3 +19,17 @@ export(
 exportClasses(
     STRINGdb
 )
+
+import(
+       RColorBrewer,
+       RCurl,
+       gplots,
+       hash,
+       igraph,
+       methods,
+       plyr,
+       png,
+       sqldf
+)
+
+importFrom(plotrix, color.scale)
