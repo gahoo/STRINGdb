@@ -523,7 +523,7 @@ Author(s):
           cat("ERROR: We support a maximum of 300 STRING identifiers per call. Please reduce the size of the input and try again. \t")
           stop()
         }
-        urlStr = paste("http://string-db.org/version_", version, "/newstring_cgi/webservices/homology_hits.pl", sep="")
+        urlStr = paste("https://string-db.org/version_", version, "/newstring_cgi/webservices/homology_hits.pl", sep="")
         identifiers=""
         for(id in string_ids ){
           identifiers = paste(identifiers, id, "%0D", sep="")
@@ -574,7 +574,7 @@ Author(s):
           cat("ERROR: We support a maximum of 300 STRING identifiers per call. Please reduce the size of the input and try again. \t")
           stop()
         }
-        urlStr = paste("http://string-db.org/version_", version, "/newstring_cgi/webservices/homology_best_hits.pl", sep="")
+        urlStr = paste("https://string-db.org/version_", version, "/newstring_cgi/webservices/homology_best_hits.pl", sep="")
         identifiers=""
         for(id in string_ids ){identifiers = paste(identifiers, id, "%0D", sep="")}
         params = list(identifiers=identifiers, symbets=symbets)
@@ -627,7 +627,7 @@ Author(s):
         }
         if(is.null(required_score) ) required_score = score_threshold
         string_ids = unique(string_ids)
-        urlStr = paste("http://string-db.org/version_",version,"/newstring_cgi/link_to.pl", sep="" )
+        urlStr = paste("https://string-db.org/version_",version,"/newstring_cgi/link_to.pl", sep="" )
         #urlStr = paste("http://130.60.240.90:8380/newstring_cgi/link_to.pl", sep="" )
         identifiers=""
         for(id in string_ids ){   identifiers = paste(identifiers, id, "%0D", sep="")}
@@ -639,7 +639,7 @@ Author(s):
 
 #           if(is.null(required_score) ) required_score = score_threshold
 #           string_ids = unique(string_ids)
-#           urlStr = paste("http://string-db.org/version_",version,"/newstring_cgi/link_to.pl?required_score=", required_score, "&limit=0&network_flavor=", network_flavor, sep="" )
+#           urlStr = paste("https://string-db.org/version_",version,"/newstring_cgi/link_to.pl?required_score=", required_score, "&limit=0&network_flavor=", network_flavor, sep="" )
 #           if(!is.null(payload_id)) urlStr = paste(urlStr, "&internal_payload_id=", payload_id, sep="")
 #           urlStr = paste(urlStr, "&identifiers=", sep="")
 #           for(id in string_ids ){
@@ -704,7 +704,7 @@ Author(s):
         if(is.null(required_score) ) required_score = score_threshold
         string_ids = unique(string_ids)
         string_ids = string_ids[!is.na(string_ids)]
-        urlStr = paste("http://string-db.org/version_", version, "/api/image/network", sep="" )
+        urlStr = paste("https://string-db.org/version_", version, "/api/image/network", sep="" )
         #urlStr = paste("http://130.60.240.90:8380/api/image/network", sep="" )
         identifiers=""
         for(id in string_ids ){ identifiers = paste(identifiers, id, "%0D", sep="")}
@@ -822,8 +822,8 @@ Author(s):
           cat("ERROR: We support a maximum of 300 STRING identifiers per call. Please reduce the size of the input and try again. \t")
           stop()
         }
-        #urlStr = paste("http://string-db.org/version_", version, "/api/tsv/abstracts?limit=1000000&identifiers=", sep="")
-        urlStr = paste("http://string-db.org/version_", version, "/newstring_cgi/webservice_handler.pl", sep="")
+        #urlStr = paste("https://string-db.org/version_", version, "/api/tsv/abstracts?limit=1000000&identifiers=", sep="")
+        urlStr = paste("https://string-db.org/version_", version, "/newstring_cgi/webservice_handler.pl", sep="")
         identifiers=""
         for(id in string_ids ){identifiers = paste(identifiers, id, "%0D", sep="")}
         params = list(limit=1000000, identifiers=identifiers, output="tsv", request="abstracts")
@@ -1081,7 +1081,7 @@ Author(s):
         if(!is.null(iframe_urls)) postFormParams = c(postFormParams, list(iframe_urls=paste(iframe_urls, collapse=" ")))
         if(!is.null(logo_imgF)) postFormParams = c(postFormParams, list(logo_img=fileUpload(logo_imgF)))
         if(!is.null(legend_imgF)) postFormParams = c(postFormParams, list(legend_img=fileUpload(legend_imgF)))
-        postRs = postFormSmart(paste("http://string-db.org/version_", version, "/newstring_cgi/webservices/post_payload.pl", sep=""),  .params = postFormParams)
+        postRs = postFormSmart(paste("https://string-db.org/version_", version, "/newstring_cgi/webservices/post_payload.pl", sep=""),  .params = postFormParams)
         
         #postRs = postForm(paste("http://130.60.240.90:8380/newstring_cgi/webservices/post_payload.pl", sep=""),  .params = postFormParams, style = 'HTTPPOST')
         return(postRs)
@@ -1142,7 +1142,7 @@ Author(s):
   
       show = function(){
         cat(paste(
-          "***********  STRING - http://string-db.org   ***********", "\n",
+          "***********  STRING - https://string-db.org   ***********", "\n",
           "(Search Tool for the Retrieval of Interacting Genes/Proteins)  ", "\n",
           "version: ", version, "\n",
           "species: ", species, "\n", 
